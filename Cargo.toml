@@ -1,0 +1,27 @@
+[package]
+name = "rp2040-pio-logic-analyzer"
+authors = ["Jan Niehusmann <jan@gondor.com>"]
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+description = "Use the RP2040 PIO as an internal logic analyzer"
+readme = "README.md"
+repository = "https://github.com/jannic/rp2040-pio-logic-analyzer.git"
+homepage = "https://github.com/jannic/rp2040-pio-logic-analyzer/"
+edition = "2018"
+resolver = "2"
+
+[dependencies]
+rp2040-hal = { git = "https://github.com/rp-rs/rp-hal.git", branch = "main", features = ["rt"] }
+pio = { git = "https://github.com/rp-rs/pio-rs/", branch="main" }
+pio-proc = { git = "https://github.com/rp-rs/pio-rs/", branch="main" }
+
+[dev-dependencies]
+cortex-m = "0.7.3"
+cortex-m-rt = "0.7.0"
+smart-leds = "0.3.0"
+ws2812-pio = { git = "https://github.com/ithinuel/ws2812-pio-rs" }
+rtt-target = { version = "0.3.1", features = ["cortex-m"] }
+panic-probe = { version = "0.2.0", features = ["print-rtt"] }
+rp2040-boot2 = { git = "https://github.com/rp-rs/rp2040-boot2-rs", branch="main" }
+embedded-time = "0.12.1"
+
