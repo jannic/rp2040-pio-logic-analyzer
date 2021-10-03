@@ -34,6 +34,11 @@ Wrap the code segment to monitor:
     probe::write_dma_buffer(&mut write, &dma_buf[..]);
 ```
 
+## Related work
+
+This library was inspired by [Buck50](https://github.com/thanks4opensource/buck50), an
+stm32 based logic analyzer.
+
 ## License
 
 This project is licensed under either of
@@ -44,3 +49,9 @@ This project is licensed under either of
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
