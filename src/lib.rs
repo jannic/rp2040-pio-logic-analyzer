@@ -27,6 +27,7 @@ fn write_footer<W: Write>(writer: &mut W, time: u32) {
 }
 
 pub fn write_data<W: Write>(writer: &mut W, time: u32, data: u32, prev_data: u32) {
+    // TODO: no unwraps!
     writeln!(writer, "#{}", time).unwrap();
     for w in 0..30 {
         let this = data >> w & 1;
@@ -130,8 +131,10 @@ impl <'a> DataAccessor<'a> {
             (self.inner.read_ptr + 2 > dma_write_ptr && self.inner.read_ptr <= dma_window_end)
             || ( dma_window_end > dma_len && dma_window_end - dma_len > self.inner.read_ptr )
         {
+            //defmt::info!("no new data; {} {} {}", self.inner.read_ptr, dma_write_ptr, dma_window_end);
             return None;
         }
+        //defmt::info!("some new data; {} {} {}", self.inner.read_ptr, dma_write_ptr, dma_window_end);
         let c = &self.inner.dma_buf[ self.inner.read_ptr .. self.inner.read_ptr+2 ];
         let time = !c[0];
         let data = c[1];
@@ -243,21 +246,25 @@ where
                 .size_word()
                 .incr_write()
                 .bit(true)
+                .ring_size()
+                .bits(15) // TODO replace hardcoded value
+                .ring_sel()
+                .set_bit()
                 .treq_sel()
                 .bits(rx1.dreq())
                 .en()
                 .bit(true)
                 .chain_to()
-                .bits(0) // TODO disabled, for now
+                .bits(2)
             }
         });
     
     let dma_buf_addr = core::ptr::addr_of!(dma_buf[0]);
-    let ch0_cfg: [u32;4] =
+    let ch0_cfg: [u32;1] =
         [
-            rxf1_ptr as u32, // READ_ADDR
-            dma_buf_addr as u32, // WRITE_ADDR
-            dma_buf.len() as u32, // TRANS_COUNT
+//            rxf1_ptr as u32, // READ_ADDR
+//            dma_buf_addr as u32, // WRITE_ADDR
+//            dma_buf.len() as u32, // TRANS_COUNT
             ctrl.read().bits(), // CTRL_TRIG
         ];
     //defmt::info!("ch0_cfg: {:#08x}", ch0_cfg);
@@ -268,13 +275,13 @@ where
 
         // (time, data) sm1 -> dma_buf
         dma.ch[0].ch_read_addr.write(|w| w.bits(rxf1_ptr as u32));
-        dma.ch[0]
-            .ch_write_addr
-            .write(|w| w.bits(dma_buf_addr as u32));
+        dma.ch[0].ch_write_addr.write(|w| w.bits(dma_buf_addr as u32));
         //dma.ch[0].ch_read_addr.write(|w| w.bits(t_ptr as u32));
-        dma.ch[0]
-            .ch_trans_count
-            .write(|w| w.bits(dma_buf.len() as u32));
+        dma.ch[0].ch_trans_count.write(|w| w.bits(dma_buf.len() as u32));
+        dma.ch[0].ch_ctrl_trig.write(|w| {
+            w.bits(ctrl.read().bits())
+        });
+        /*
         dma.ch[0].ch_ctrl_trig.write(|w| {
             w.data_size()
                 .size_word()
@@ -286,29 +293,27 @@ where
                 .bit(true)
                 .chain_to()
                 .bits(2)
-        });
+        }); */
         // reconfigures and triggers channel #0 and then chains to channel #1, which doesn't need
         // reconfiguration.
-        /*
         dma.ch[2].ch_read_addr.write(|w| w.bits(core::ptr::addr_of!(ch0_cfg) as u32));
-        dma.ch[2].ch_write_addr.write(|w| w.bits(core::ptr::addr_of!(dma.ch[0].ch_write_addr) as u32));
-        dma.ch[2].ch_trans_count.write(|w| w.bits(4));
+        //dma.ch[2].ch_write_addr.write(|w| w.bits(core::ptr::addr_of!(dma.ch[0].ch_read_addr) as u32));
+        dma.ch[2].ch_write_addr.write(|w| w.bits(core::ptr::addr_of!(dma.ch[0].ch_ctrl_trig) as u32));
+        dma.ch[2].ch_trans_count.write(|w| w.bits(1));
         dma.ch[2].ch_ctrl_trig.write(|w| {
             w.data_size()
                 .size_word()
-                .ring_size()
-                .bits(4)
                 .incr_read()
-                .bit(true)
-                .incr_write() // TODO how to reset this?
-                .bit(true)
+                .bit(false)
+                .incr_write()
+                .bit(false)
                 .treq_sel()
                 .permanent()
                 .en()
                 .bit(true)
                 .chain_to()
                 .bits(1)
-        });*/
+        });
 
         while !dma.ch[0].ch_ctrl_trig.read().en().bits() {
             defmt::info!("waiting for dma[0].en()");
