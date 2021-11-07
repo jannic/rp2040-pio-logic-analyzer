@@ -5,7 +5,6 @@ use core::iter::repeat;
 use panic_probe as _;
 
 use cortex_m_rt::entry;
-use embedded_time::fixed_point::FixedPoint;
 use hal::{
     clocks::{init_clocks_and_plls, Clock},
     gpio::{FunctionPio0, Pin, Pins},
@@ -75,7 +74,7 @@ fn main() -> ! {
     .unwrap();
 
     let timer = Timer::new(pac.TIMER, &mut pac.RESETS);
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
     let sio = Sio::new(pac.SIO);
 
     let pins = Pins::new(
@@ -85,10 +84,10 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let _led: Pin<_, FunctionPio0> = pins.gpio2.into_mode();
+    let led: Pin<_, FunctionPio0> = pins.gpio2.into_mode();
     let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
     let mut ws = Ws2812::new(
-        2,
+        led,
         &mut pio,
         sm0,
         clocks.system_clock.freq(),
@@ -108,5 +107,6 @@ fn main() -> ! {
 
     probe::write_dma_buffer(&mut channel, &dma_buf[..]);
 
+    #[allow(clippy::empty_loop)]
     loop {}
 }
