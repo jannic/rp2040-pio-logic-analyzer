@@ -87,9 +87,6 @@ where
         "
     );
 
-    let rxf_ptr = core::ptr::addr_of!(pio0.rxf);
-    let rxf1_ptr = core::ptr::addr_of!(pio0.rxf[1]);
-    let txf1_ptr = core::ptr::addr_of!(pio0.txf[1]);
 
     let div = 1f32;
 
@@ -123,7 +120,7 @@ where
         dma.ch[0]
             .ch_write_addr
             .write(|w| w.bits(dma_buf_addr as u32));
-        dma.ch[0].ch_read_addr.write(|w| w.bits(rxf1_ptr as u32));
+        dma.ch[0].ch_read_addr.write(|w| w.bits(rx1.fifo_address() as u32));
         //dma.ch[0].ch_read_addr.write(|w| w.bits(t_ptr as u32));
         dma.ch[0]
             .ch_trans_count
@@ -139,8 +136,8 @@ where
                 .bit(true)
         });
         // data sm0 -> sm1
-        dma.ch[1].ch_write_addr.write(|w| w.bits(txf1_ptr as u32));
-        dma.ch[1].ch_read_addr.write(|w| w.bits(rxf_ptr as u32));
+        dma.ch[1].ch_write_addr.write(|w| w.bits(tx1.fifo_address() as u32));
+        dma.ch[1].ch_read_addr.write(|w| w.bits(rx0.fifo_address() as u32));
         dma.ch[1]
             .ch_trans_count
             .write(|w| w.bits(dma_buf.len() as u32 / 2));
