@@ -7,7 +7,7 @@
 use core::fmt::Write;
 use rp2040_hal as hal;
 
-use hal::{pac, pio::PIOExt, pio::Rx, pio::Tx, pio::ValidStateMachine};
+use hal::{pac, pio::PIOExt};
 
 /// Write the contents of dma_buf to writer, in VCD format, readable
 /// (for example) with pulseview.
@@ -39,36 +39,6 @@ pub fn write_dma_buffer<W: Write>(writer: &mut W, dma_buf: &[u32]) {
     writeln!(writer, "#{}", last_time - start + 2500).unwrap();
 }
 
-pub trait PioDreq {
-    fn dreq_base() -> u8;
-}
-
-impl PioDreq for pac::PIO0 {
-    fn dreq_base() -> u8 {
-        0
-    }
-}
-impl PioDreq for pac::PIO1 {
-    fn dreq_base() -> u8 {
-        8
-    }
-}
-
-trait Dreq {
-    fn dreq(&self) -> u8;
-}
-
-impl<P: PioDreq, SM: ValidStateMachine<PIO = P>> Dreq for Rx<SM> {
-    fn dreq(&self) -> u8 {
-        SM::PIO::dreq_base() + SM::id() as u8 + 4
-    }
-}
-impl<P: PioDreq, SM: ValidStateMachine<PIO = P>> Dreq for Tx<SM> {
-    fn dreq(&self) -> u8 {
-        SM::PIO::dreq_base() + SM::id() as u8
-    }
-}
-
 pub fn run_with_logic_analyzer<T, R, PIO>(
     pio0: PIO,
     dma: pac::DMA,
@@ -78,7 +48,7 @@ pub fn run_with_logic_analyzer<T, R, PIO>(
 ) -> R
 where
     T: FnOnce() -> R,
-    PIO: PIOExt + PioDreq,
+    PIO: PIOExt,
 {
     // Make sure DMA is out of reset
     resets.reset.modify(|_, w| w.dma().clear_bit());
@@ -164,7 +134,7 @@ where
                 .incr_write()
                 .bit(true)
                 .treq_sel()
-                .bits(rx1.dreq())
+                .bits(rx1.dreq_value())
                 .en()
                 .bit(true)
         });
@@ -178,7 +148,7 @@ where
             w.data_size()
                 .size_word()
                 .treq_sel()
-                .bits(rx0.dreq())
+                .bits(rx0.dreq_value())
                 .en()
                 .bit(true)
         });
