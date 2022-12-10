@@ -9,7 +9,6 @@ use rp2040_hal as hal;
 
 use hal::{pac, pio::PIOExt};
 
-
 pub fn write_header<W: Write>(writer: &mut W) {
     // timescale: 5 PIO steps / 125MHz => 40ns
     writeln!(writer, "$timescale 40 ns $end").unwrap();
@@ -65,13 +64,7 @@ where
     T: FnOnce() -> R,
     PIO: PIOExt,
 {
-    run_with_logic_analyzer2(
-        pio0,
-        dma,
-        resets,
-        dma_buf,
-        |_| run()
-    )
+    run_with_logic_analyzer2(pio0, dma, resets, dma_buf, |_| run())
 }
 
 struct DataAccessorInner<'a> {
@@ -86,38 +79,62 @@ pub struct Sample {
     pub data: u32,
     pub time: u32,
 }
-impl <'a> DataAccessor<'a> {
+impl<'a> DataAccessor<'a> {
     pub fn try_next(&mut self) -> Option<Sample> {
         let dma_buf_addr = core::ptr::addr_of!(self.inner.dma_buf[0]) as u32;
         let mut dma_write_addr = self.inner.dma.ch[0].ch_write_addr.read().bits();
         while dma_write_addr < dma_buf_addr || dma_write_addr > dma_buf_addr + 0x8000 {
             // https://forums.raspberrypi.com/viewtopic.php?t=323813
-            defmt::trace!("dma_write_addr {=u32:x} < dma_buf_addr {=u32:x}", dma_write_addr, dma_buf_addr);
+            defmt::trace!(
+                "dma_write_addr {=u32:x} < dma_buf_addr {=u32:x}",
+                dma_write_addr,
+                dma_buf_addr
+            );
             dma_write_addr = self.inner.dma.ch[0].ch_write_addr.read().bits();
         }
         let dma_write_ptr = (dma_write_addr - dma_buf_addr) as usize / 4;
-        let dma_len = self.inner.dma_buf.len(); 
+        let dma_len = self.inner.dma_buf.len();
         let dma_window_length = dma_len / 2;
         let dma_window_end = dma_write_ptr + dma_window_length; // may point outside of buffer!
-        // TODO: check this condition. covers all cases? off-by-one errors?
+                                                                // TODO: check this condition. covers all cases? off-by-one errors?
 
         // don't read from dma_write_ptr..(dma_write_ptr + dma_window_length), modulo dma_len.
-        if (dma_write_ptr+1..(dma_write_ptr + dma_window_length)).contains( &self.inner.read_ptr )
-            || (dma_write_ptr..(dma_write_ptr + dma_window_length)).contains( &(self.inner.read_ptr + dma_len) ) // this handles the wrap-around case
+        if (dma_write_ptr + 1..(dma_write_ptr + dma_window_length)).contains(&self.inner.read_ptr)
+            || (dma_write_ptr..(dma_write_ptr + dma_window_length))
+                .contains(&(self.inner.read_ptr + dma_len))
+        // this handles the wrap-around case
         {
             //defmt::trace!("no new data; {=u32:x} {=u32:x} {=u32:x}", self.inner.read_ptr as u32, dma_write_ptr as u32, dma_window_end as u32);
-            defmt::warn!("Skipping! {=u32:x} {=u32:x} {=u32:x}", self.inner.read_ptr as u32, dma_write_ptr as u32, dma_window_end as u32);
+            defmt::warn!(
+                "Skipping! {=u32:x} {=u32:x} {=u32:x}",
+                self.inner.read_ptr as u32,
+                dma_write_ptr as u32,
+                dma_window_end as u32
+            );
             self.inner.read_ptr = dma_write_ptr & !1;
-            defmt::warn!("Updated: {=u32:x} {=u32:x} {=u32:x}", self.inner.read_ptr as u32, dma_write_ptr as u32, dma_window_end as u32);
+            defmt::warn!(
+                "Updated: {=u32:x} {=u32:x} {=u32:x}",
+                self.inner.read_ptr as u32,
+                dma_write_ptr as u32,
+                dma_window_end as u32
+            );
             return None;
         }
-        if self.inner.read_ptr == dma_write_ptr || self.inner.read_ptr + 1 == dma_write_ptr || self.inner.read_ptr + 2 == dma_write_ptr  {
+        if self.inner.read_ptr == dma_write_ptr
+            || self.inner.read_ptr + 1 == dma_write_ptr
+            || self.inner.read_ptr + 2 == dma_write_ptr
+        {
             // read ptr is immediately behind write ptr
             defmt::trace!("up to date @ {:x}", self.inner.read_ptr);
             return None;
         }
-        defmt::trace!("some new data; {=u32:x} {=u32:x} {=u32:x}", self.inner.read_ptr as u32, dma_write_ptr as u32, dma_window_end as u32);
-        let c = &self.inner.dma_buf[ self.inner.read_ptr .. self.inner.read_ptr+2 ];
+        defmt::trace!(
+            "some new data; {=u32:x} {=u32:x} {=u32:x}",
+            self.inner.read_ptr as u32,
+            dma_write_ptr as u32,
+            dma_window_end as u32
+        );
+        let c = &self.inner.dma_buf[self.inner.read_ptr..self.inner.read_ptr + 2];
         let time = !c[0];
         let data = c[1];
         /*
@@ -136,11 +153,14 @@ impl <'a> DataAccessor<'a> {
         if self.inner.read_ptr + 1 >= self.inner.dma_buf.len() {
             self.inner.read_ptr = 0;
         }
-        Some(Sample{data, time})
+        Some(Sample { data, time })
     }
 
-    pub fn dbg_ptr(&mut self) -> (usize,u32) {
-        (self.inner.read_ptr, self.inner.dma.ch[0].ch_write_addr.read().bits())
+    pub fn dbg_ptr(&mut self) -> (usize, u32) {
+        (
+            self.inner.read_ptr,
+            self.inner.dma.ch[0].ch_write_addr.read().bits(),
+        )
     }
 }
 
@@ -192,7 +212,6 @@ where
         "
     );
 
-
     let div = 1f32;
 
     let (mut pio, sm0, sm1, sm2, sm3) = pio0.split(resets);
@@ -218,7 +237,7 @@ where
 
     let ctrl: hal::pac::dma::ch::CH_CTRL_TRIG = unsafe { core::mem::transmute(0u32) };
     ctrl.write(|w| {
-            unsafe {
+        unsafe {
             w.data_size()
                 .size_word()
                 .incr_write()
@@ -233,18 +252,17 @@ where
                 .bit(true)
                 .chain_to()
                 .bits(2)
-            }
-        });
-    
+        }
+    });
+
     let dma_buf_addr = core::ptr::addr_of!(dma_buf[0]);
     defmt::info!("set dma_buf_addr {:x}", dma_buf_addr);
-    let ch0_cfg: [u32;1] =
-        [
-//            rxf1_ptr as u32, // READ_ADDR
-//            dma_buf_addr as u32, // WRITE_ADDR
-//            dma_buf.len() as u32, // TRANS_COUNT
-            ctrl.read().bits(), // CTRL_TRIG
-        ];
+    let ch0_cfg: [u32; 1] = [
+        //            rxf1_ptr as u32, // READ_ADDR
+        //            dma_buf_addr as u32, // WRITE_ADDR
+        //            dma_buf.len() as u32, // TRANS_COUNT
+        ctrl.read().bits(), // CTRL_TRIG
+    ];
     //defmt::info!("ch0_cfg: {:#08x}", ch0_cfg);
 
     unsafe {
@@ -252,13 +270,17 @@ where
         while dma.chan_abort.read().bits() & 7 != 0 {}
 
         // (time, data) sm1 -> dma_buf
-        dma.ch[0].ch_read_addr.write(|w| w.bits(rx1.fifo_address() as u32));
-        dma.ch[0].ch_write_addr.write(|w| w.bits(dma_buf_addr as u32));
+        dma.ch[0]
+            .ch_read_addr
+            .write(|w| w.bits(rx1.fifo_address() as u32));
+        dma.ch[0]
+            .ch_write_addr
+            .write(|w| w.bits(dma_buf_addr as u32));
         //dma.ch[0].ch_read_addr.write(|w| w.bits(t_ptr as u32));
-        dma.ch[0].ch_trans_count.write(|w| w.bits(dma_buf.len() as u32));
-        dma.ch[0].ch_ctrl_trig.write(|w| {
-            w.bits(ctrl.read().bits())
-        });
+        dma.ch[0]
+            .ch_trans_count
+            .write(|w| w.bits(dma_buf.len() as u32));
+        dma.ch[0].ch_ctrl_trig.write(|w| w.bits(ctrl.read().bits()));
         /*
         dma.ch[0].ch_ctrl_trig.write(|w| {
             w.data_size()
@@ -274,9 +296,13 @@ where
         }); */
         // reconfigures and triggers channel #0 and then chains to channel #1, which doesn't need
         // reconfiguration.
-        dma.ch[2].ch_read_addr.write(|w| w.bits(core::ptr::addr_of!(ch0_cfg) as u32));
+        dma.ch[2]
+            .ch_read_addr
+            .write(|w| w.bits(core::ptr::addr_of!(ch0_cfg) as u32));
         //dma.ch[2].ch_write_addr.write(|w| w.bits(core::ptr::addr_of!(dma.ch[0].ch_read_addr) as u32));
-        dma.ch[2].ch_write_addr.write(|w| w.bits(core::ptr::addr_of!(dma.ch[0].ch_ctrl_trig) as u32));
+        dma.ch[2]
+            .ch_write_addr
+            .write(|w| w.bits(core::ptr::addr_of!(dma.ch[0].ch_ctrl_trig) as u32));
         dma.ch[2].ch_trans_count.write(|w| w.bits(1));
         dma.ch[2].ch_ctrl_trig.write(|w| {
             w.data_size()
@@ -297,8 +323,12 @@ where
             defmt::info!("waiting for dma[0].en()");
         }
         // data sm0 -> sm1
-        dma.ch[1].ch_read_addr.write(|w| w.bits(rx0.fifo_address() as u32));
-        dma.ch[1].ch_write_addr.write(|w| w.bits(tx1.fifo_address() as u32));
+        dma.ch[1]
+            .ch_read_addr
+            .write(|w| w.bits(rx0.fifo_address() as u32));
+        dma.ch[1]
+            .ch_write_addr
+            .write(|w| w.bits(tx1.fifo_address() as u32));
         dma.ch[1]
             .ch_trans_count
             .write(|w| w.bits(dma_buf.len() as u32 / 2));
@@ -324,8 +354,8 @@ where
     };
     let pio_sm1 = pio_sm1.start();
     let pio_sm0 = pio_sm0.start();
-    let mut dummy = DataAccessor{
-        inner: DataAccessorInner{
+    let mut dummy = DataAccessor {
+        inner: DataAccessorInner {
             dma_buf,
             read_ptr: 0,
             dma: &dma,
