@@ -212,12 +212,12 @@ where
         "
     );
 
-    let div = 1f32;
+    let div = 1;
 
     let (mut pio, sm0, sm1, sm2, sm3) = pio0.split(resets);
     let installed = pio.install(&program2.program).unwrap();
     let (pio_sm1, rx1, tx1) = rp2040_hal::pio::PIOBuilder::from_program(installed)
-        .clock_divisor(div)
+        .clock_divisor_fixed_point(div, 0)
         .autopull(true)
         .autopush(true)
         .build(sm1);
@@ -230,7 +230,7 @@ where
     // - start SM
     let (pio_sm0, rx0, tx0) = rp2040_hal::pio::PIOBuilder::from_program(installed)
         .in_pin_base(0)
-        .clock_divisor(div)
+        .clock_divisor_fixed_point(div, 0)
         .autopush(true)
         .in_shift_direction(rp2040_hal::pio::ShiftDirection::Left)
         .build(sm0);
